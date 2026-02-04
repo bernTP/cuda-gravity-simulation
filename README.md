@@ -2,14 +2,23 @@
 
 ##  1. Project Overview
 
-This project implements a three-dimensional **N-body gravitational simulation** using CUDA to model the dynamic evolution of a galaxy-like system.  
-Each particle represents a star interacting gravitationally with all others, with a massive central body acting as a black hole.
+## 🔍 Technical Summary
 
-The main goals are:
-- Implement a baseline brute-force CUDA kernel (*naive*)
-- Optimize force computation using shared memory (*tiling*)
-- Analyze performance improvements and scalability
-- Visualize the simulation in 3D using Python
+This project implements a GPU-accelerated N-body gravitational simulation using CUDA.  
+
+Two kernels are developed:
+
+- A baseline brute-force implementation using global memory
+- An optimized tiled implementation using shared memory
+
+The optimized kernel reduces global memory traffic through data reuse in shared memory, leading to significant performance improvements while preserving physical accuracy.
+
+Key focus areas:
+
+- CUDA memory hierarchy optimization
+- Parallel force computation
+- Performance scalability analysis
+- 3D visualization of particle dynamics
 
 **Simulation Preview**
 
@@ -65,8 +74,8 @@ Each block:
 - Improved cache efficiency
 
 #### Performance impact:
-- Better GPU occupancy
-
+- Reduced global memory bandwidth pressure
+- Improved GPU occupancy and throughput
 ---
 
 ### 🔍 Complexity Analysis
@@ -74,7 +83,7 @@ Each block:
 | Method | Memory Access Pattern | Compute Complexity | Bandwidth Usage |
 |-------|---------------------|------------------|----------------|
 | Naive | Global memory only | O(N²) | Very high |
-| Tiled | Global + Shared memory | O(N²/tile) | Reduced |
+| Tiled | Global + Shared memory | O(N²) | Reduced |
 
 ---
 
@@ -92,6 +101,7 @@ Each block:
 	-   Kernel: tiled
 
 ```bash
+nvidia-smi
 pip install -r requirements.txt
 make
 
@@ -103,11 +113,10 @@ python visualize.py -i output.csv
 ```
 
 ##  4. Results and Performance Comparison
-###  4.1 Visual Output
-#### 4.1.1 Naive Kernel (with Default parameters)
-![Galaxy Simulation](galaxy_naive.gif)
-#### 4.1.2 Tiled Kernel (with Default parameters)
-![Galaxy Simulation](galaxy_tiled.gif)
+###  4.1 Visual Output (with Default parameters)
+| Naive Kernel | Tiled Kernel |
+|--------------------|----------|
+| ![Galaxy Simulation](galaxy_naive.gif)  | ![Galaxy Simulation](galaxy_tiled.gif) |
 
 
 Both kernels produce equivalent physical trajectories.  
@@ -117,13 +126,13 @@ The major difference lies in execution speed.
 
 ###  4.2 Execution Time
 
-| Number of Particles | Naive (s) |  Tiled (s)|
-|-------|---------------------|------------------|
-| 512  | 0.0788 | 0.0640 |
-| 1024 | 0.167  | 0.125 |
-| 2048 | 0.342  | 0.246 |
-| 4096 | 0.692  | 0.485 |
-| 8192 | 1.378  | 0.962 |
+| Number of Particles | Naive (s) | Tiled (s) | Speedup |
+|--------------------|----------|----------|---------|
+| 512  | 0.0788 | 0.0640 | 1.23× |
+| 1024 | 0.167  | 0.125 | 1.34× |
+| 2048 | 0.342  | 0.246 | 1.39× |
+| 4096 | 0.692  | 0.485 | 1.43× |
+| 8192 | 1.378  | 0.962 | 1.43× |
 
 ----------
 
@@ -144,3 +153,16 @@ This project demonstrates the critical role of memory optimization in CUDA appli
 -   Proper use of CUDA memory hierarchy is essential for scalable GPU computing
     
 The tiled kernel achieves substantial acceleration while preserving numerical correctness.
+
+## 6. Limitations and Future Work
+
+While the tiled shared memory optimization significantly improves performance, the simulation still relies on a direct O(N²) force computation.
+
+Potential improvements include:
+
+- Barnes-Hut algorithm for O(N log N) complexity
+- Multi-GPU parallelization
+- Further memory coalescing optimizations
+
+
+These approaches would enable simulations with much larger particle counts.

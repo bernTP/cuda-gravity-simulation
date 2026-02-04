@@ -4,7 +4,12 @@
 #include <getopt.h>
 #include <random>
 #include <iomanip>
+#include <cmath> // Required for sin, cos, sqrt
 #include "nbody.cuh"
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 #define CUDA_CHECK(call)                                                                                                  \
     do                                                                                                                    \
@@ -28,48 +33,94 @@ void print_csv_row(const std::vector<Particle> &particles)
     std::cout << "\n";
 }
 
+typedef enum CudaMode
+{
+    NAIVE,
+    TILED
+} cudamode_t;
+
 int main(int argc, char **argv)
 {
     int n = 1024;
-    int block_size = 256;
+    constexpr size_t block_size = 256;
     int iterations = 10;
     int steps_per_frame = 20;
-    std::string mode = "naive";
+    cudamode_t mode = TILED;
+    constexpr size_t shared_mem_size = block_size * sizeof(Particle);
 
     int opt;
-    while ((opt = getopt(argc, argv, "n:s:b:i:m:")) != -1)
+    while ((opt = getopt(argc, argv, "n:s:i:m:")) != -1)
     {
         switch (opt)
         {
         case 'n':
             n = std::stoi(optarg);
             break;
-        case 'b':
-            block_size = std::stoi(optarg);
-            break;
         case 'i':
             iterations = std::stoi(optarg);
             break;
         case 'm':
-            mode = optarg;
+        {
+            std::string str_mode = optarg;
+            if (str_mode == "naive")
+            {
+                mode = NAIVE;
+            }
+            else if (str_mode == "tiled")
+            {
+                mode = TILED;
+            }
+            else
+            {
+                std::cerr << "Unknown mode: " << str_mode << "\n";
+                return 1;
+            }
             break;
+        }
         case 's':
             steps_per_frame = std::stoi(optarg);
             break;
         default:
-            std::cerr << "Usage: " << argv[0] << " -n <num_particles> -b <block_size> -i <iterations> -m <naive|tiled>\n";
+            std::cerr << "Usage: " << argv[0] << " -n <num_particles> -s <skip_nb_frame> -i <iterations> -m <naive|tiled>\n";
             return 1;
         }
     }
 
     std::vector<Particle> h_particles(n);
-    std::mt19937 gen(42); // random
-    std::uniform_real_distribution<float> dist(-100.0f, 100.0f); // random values between these values (hard coded)
-    std::uniform_real_distribution<float> mass_dist(1.0f, 10.0f);
+    std::mt19937 gen(42);
 
-    for (int i = 0; i < n; ++i)
+    // Orbital Velocity technique, making better dataset for better galaxy results
+    constexpr float galaxy_radius = 100.0f;
+    constexpr float core_radius = 5.0f;     // no particles spawned closer than this
+    constexpr float disk_thickness = 2.0f;  // flatness of the galaxy
+    constexpr float center_mass = 10000.0f; // mass of the black hole in the middle
+    constexpr float G = 1.0f;               // gravity constant (simulation units)
+
+    h_particles[0] = {0, 0, 0, 0, 0, 0, center_mass}; // black hole to center around
+
+    std::uniform_real_distribution<float> angle_dist(0.0f, 2.0f * M_PI);
+    std::uniform_real_distribution<float> radius_dist(core_radius, galaxy_radius);
+    std::uniform_real_distribution<float> height_dist(-disk_thickness, disk_thickness);
+    std::uniform_real_distribution<float> mass_dist(0.5f, 5.0f);
+
+    for (int i = 1; i < n; ++i)
     {
-        h_particles[i] = {dist(gen), dist(gen), dist(gen), 0, 0, 0, mass_dist(gen)};
+        float angle = angle_dist(gen);
+        float dist = radius_dist(gen);
+
+        float px = dist * cos(angle);
+        float py = dist * sin(angle);
+        float pz = height_dist(gen);
+
+        float velocity = sqrt(G * center_mass / dist);
+
+        float vx = -velocity * sin(angle);
+        float vy = velocity * cos(angle);
+        float vz = 0.0f;
+
+        float mass = mass_dist(gen);
+
+        h_particles[i] = {px, py, pz, vx, vy, vz, mass};
     }
 
     Particle *d_particles;
@@ -90,14 +141,14 @@ int main(int argc, char **argv)
     {
         for (int s = 0; s < steps_per_frame; ++s)
         {
-            if (mode == "naive")
+            switch (mode)
             {
+            case NAIVE:
                 nbody_naive_kernel<<<num_blocks, block_size>>>(d_particles, n, dt, softening);
-            }
-            else
-            {
-                size_t shared_mem_size = block_size * sizeof(Particle);
+                break;
+            case TILED:
                 nbody_tiled_kernel<<<num_blocks, block_size, shared_mem_size>>>(d_particles, n, dt, softening);
+                break;
             }
         }
 

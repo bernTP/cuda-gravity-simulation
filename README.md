@@ -1,129 +1,87 @@
-# CUDA N-Body Galaxy Simulation
+# 🌌 CUDA N-Body Galaxy Simulation
 
-##  1. Project Overview
+## 1. Project Overview
 
-## 🔍 Technical Summary
+This project presents a GPU-accelerated N-body gravitational simulation implemented in CUDA. The goal is to model the motion of a large number of particles interacting under gravity, forming a galaxy-like system with a massive central object.
 
-This project implements a GPU-accelerated N-body gravitational simulation using CUDA.  
+Two CUDA kernels are implemented:
 
-Two kernels are developed:
+- A simple brute-force version using only global memory  
+- An optimized version using shared memory with a tiling approach  
 
-- A baseline brute-force implementation using global memory
-- An optimized tiled implementation using shared memory
 
-The optimized kernel reduces global memory traffic through data reuse in shared memory, leading to significant performance improvements while preserving physical accuracy.
-
-Key focus areas:
-
-- CUDA memory hierarchy optimization
-- Parallel force computation
-- Performance scalability analysis
-- 3D visualization of particle dynamics
-
-**Simulation Preview**
+### Simulation Preview
 
 ![Galaxy Simulation](galaxy_fixed.gif)
 
 ---
 
-## 2. CUDA Implementation Techniques
+## 2. CUDA Implementation Overview
 
-The simulation computes gravitational forces using a direct all-pairs interaction. This leads to an O(N²) computational complexity. Two CUDA strategies are implemented.
-
----
-
-### 2.1 Naive Global Memory Kernel
-
-Each CUDA thread is responsible for updating one particle.
-
-#### Workflow:
-
-- Each thread loads all particles directly from **global memory**
-- Computes pairwise forces sequentially
-- Updates velocity and position
-
-#### Key properties:
-
-- Each particle is read N times by different threads
-- Heavy pressure on global memory bandwidth
-- No shared memory usage
-
-#### Performance impact:
-
-- Poor scalability
-- Quickly becomes bandwidth-bound
+The simulation computes gravitational forces between all pairs of particles.  
+This results in a computational complexity of O(N²), which is common for direct N-body methods. The two different cuda implementations are the following:
 
 ---
 
-### 2.2 Tiled Kernel with Shared Memory Optimization
+### 2.1 Naive Kernel
 
-The tiled version partitions the particle set into blocks of size `block_size`.
+In the naive approach, each CUDA thread updates one particle. This method is easy to implement but inefficient because the same particle data is repeatedly loaded from slow global memory.
+So, memory bandwidth becomes the main bottleneck and performance drops quickly as the number of particles increases  
 
-#### Workflow:
-Each block:
-
-1. Loads a tile of particles from global memory into **shared memory**
-2. Synchronizes threads using `__syncthreads()`
-3. Computes interactions between the local particle and the tile
-4. Iterates over all tiles
-
-#### Key properties:
-
-- Drastically reduced global memory transactions
-- High data reuse
-- Improved cache efficiency
-
-#### Performance impact:
-- Reduced global memory bandwidth pressure
-- Improved GPU occupancy and throughput
 ---
 
-### 🔍 Complexity Analysis
+### 2.2 Tiled Kernel Using Shared Memory
 
-| Method | Memory Access Pattern | Compute Complexity | Bandwidth Usage |
-|-------|---------------------|------------------|----------------|
+The optimized version divides the particles into small blocks (tiles). By reusing data stored in fast shared memory, the number of global memory accesses is greatly reduced.
+This leads to a lower memory traffic, better GPU utilization, higher overall performance.
+
+---
+
+### 2.3 Complexity Analysis
+
+| Method | Memory Usage | Compute Complexity | Bandwidth Pressure |
+|-------|-------------|------------------|-------------------|
 | Naive | Global memory only | O(N²) | Very high |
 | Tiled | Global + Shared memory | O(N²) | Reduced |
 
 ---
 
-## 3. Build & Run Instructions
+## 3. Build and Run Instructions
 
-###  Requirements
+### 3.1 Requirements
+- NVIDIA CUDA Toolkit  
+- Python  
+- Python libraries listed in `requirements.txt`  
 
-- NVIDIA CUDA Toolkit
-- Python
-- Python dependencies
-- Default parameters:
-	-   Particles: 1024
-	-   Iterations: 10
-	-   Steps per frame: 20
-	-   Kernel: tiled
+Default simulation parameters:
+
+- Particles: 1024  
+- Iterations: 10  
+- Steps per frame: 20  
+- Kernel: tiled  
+
+### 3.2 Compilation and Execution
 
 ```bash
 nvidia-smi
 pip install -r requirements.txt
 make
 
-./nbody_sim -n 1024 -s 20 -i 10 -m tiled > output.csv 
+./nbody_sim -n 1024 -s 20 -i 10 -m tiled > output.csv
 or
-./nbody_sim -n 1024 -s 20 -i 10 -m naive > output.csv 
+./nbody_sim -n 1024 -s 20 -i 10 -m naive > output.csv
 
 python visualize.py -i output.csv
 ```
 
-##  4. Results and Performance Comparison
+## 4. Results and Performance Comparison
 ###  4.1 Visual Output (with Default parameters)
 | Naive Kernel | Tiled Kernel |
 |--------------------|----------|
 | ![Galaxy Simulation](galaxy_naive.gif)  | ![Galaxy Simulation](galaxy_tiled.gif) |
+	
 
-
-Both kernels produce equivalent physical trajectories.  
-The major difference lies in execution speed.
-
-----------
-
+Both implementations produce the same physical motion of particles. The main difference lies in how fast the simulation runs.
 ###  4.2 Execution Time
 
 | Number of Particles | Naive (s) | Tiled (s) | Speedup |
@@ -142,27 +100,10 @@ The major difference lies in execution speed.
 -   Tiled kernel minimizes redundant global memory reads
 -   Speedup increases with particle count
 -   Shared memory significantly improves arithmetic intensity
+
 ----------
 
 ## 5. Conclusion
 
-This project demonstrates the critical role of memory optimization in CUDA applications:
-
--   Direct N² implementations are simple but inefficient
--   Shared memory tiling drastically improves performance
--   Proper use of CUDA memory hierarchy is essential for scalable GPU computing
-    
-The tiled kernel achieves substantial acceleration while preserving numerical correctness.
-
-## 6. Limitations and Future Work
-
-While the tiled shared memory optimization significantly improves performance, the simulation still relies on a direct O(N²) force computation.
-
-Potential improvements include:
-
-- Barnes-Hut algorithm for O(N log N) complexity
-- Multi-GPU parallelization
-- Further memory coalescing optimizations
-
-
-These approaches would enable simulations with much larger particle counts.
+This project highlights the importance of memory optimization in CUDA programming. The optimized kernel reduces global memory traffic through data reuse in shared memory, leading to significant performance improvements while preserving physical accuracy.
+Overall, the project demonstrates how thoughtful use of CUDA’s memory hierarchy can lead to more scalable GPU applications.

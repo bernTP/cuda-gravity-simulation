@@ -21,21 +21,18 @@ Two CUDA kernels are implemented:
 The simulation computes gravitational forces between all pairs of particles.  
 This results in a computational complexity of O(N²), which is common for direct N-body methods. The two different cuda implementations are the following:
 
----
 
 ### 2.1 Naive Kernel
 
 In the naive approach, each CUDA thread updates one particle. This method is easy to implement but inefficient because the same particle data is repeatedly loaded from slow global memory.
 So, memory bandwidth becomes the main bottleneck and performance drops quickly as the number of particles increases  
 
----
 
 ### 2.2 Tiled Kernel Using Shared Memory
 
 The optimized version divides the particles into small blocks (tiles). By reusing data stored in fast shared memory, the number of global memory accesses is greatly reduced.
 This leads to a lower memory traffic, better GPU utilization, higher overall performance.
 
----
 
 ### 2.3 Complexity Analysis
 
@@ -74,6 +71,8 @@ or
 python visualize.py -i output.csv
 ```
 
+---
+
 ## 4. Results and Performance Comparison
 ###  4.1 Visual Output (with Default parameters)
 | Naive Kernel | Tiled Kernel |
@@ -92,7 +91,7 @@ Both implementations produce the same physical motion of particles. The main dif
 | 4096 | 0.692  | 0.485 | 1.43× |
 | 8192 | 1.378  | 0.962 | 1.43× |
 
-----------
+
 
 ###  4.3 Performance Observations
 
@@ -101,7 +100,7 @@ Both implementations produce the same physical motion of particles. The main dif
 -   Speedup increases with particle count
 -   Shared memory significantly improves arithmetic intensity
 
-----------
+---
 
 ## 5. Conclusion
 

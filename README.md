@@ -64,9 +64,9 @@ nvidia-smi
 pip install -r requirements.txt
 make
 
-./nbody_sim -n 1024 -s 20 -i 10 -m tiled > output.csv
+./nbody_sim -i 50000 -s 200 -m tiled 1> output.csv
 or
-./nbody_sim -n 1024 -s 20 -i 10 -m naive > output.csv
+./nbody_sim -i 50000 -s 200 -m naive 1> output.csv
 
 python visualize.py -i output.csv
 ```

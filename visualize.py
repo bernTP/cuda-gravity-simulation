@@ -161,8 +161,9 @@ def main():
 
     print(f"Saving HTML to {args.output} (this might take a moment)...")
     anim = create_animation(frames, args)
-    
-    anim.save("galaxy.gif", writer="pillow", fps=args.fps)
+
+    if False: # temp for readme
+        anim.save("galaxy.gif", writer="pillow", fps=args.fps)
     anim.to_jshtml()
 
     with open(args.output, "w") as f:

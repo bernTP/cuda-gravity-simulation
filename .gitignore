@@ -3,6 +3,9 @@
 
 nbody_sim
 
+*.csv
+*.html
+
 ### C++ ###
 # Prerequisites
 *.d

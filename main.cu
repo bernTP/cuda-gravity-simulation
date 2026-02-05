@@ -4,6 +4,7 @@
 #include <getopt.h>
 #include <random>
 #include <iomanip>
+#include <chrono>
 #include <cmath> // Required for sin, cos, sqrt
 #include "nbody.cuh"
 
@@ -36,7 +37,8 @@ void print_csv_row(const std::vector<Particle> &particles)
 typedef enum CudaMode
 {
     NAIVE,
-    TILED
+    TILED,
+    TREE // CPU
 } cudamode_t;
 
 int main(int argc, char **argv)
@@ -70,6 +72,10 @@ int main(int argc, char **argv)
             {
                 mode = TILED;
             }
+            else if (str_mode == "tree")
+            {
+                mode = TREE;
+            }
             else
             {
                 std::cerr << "Unknown mode: " << str_mode << "\n";
@@ -90,11 +96,11 @@ int main(int argc, char **argv)
     std::mt19937 gen(42);
 
     // Orbital Velocity technique, making better dataset for better galaxy results
-    constexpr float galaxy_radius = 100.0f;
-    constexpr float core_radius = 5.0f;     // no particles spawned closer than this
-    constexpr float disk_thickness = 2.0f;  // flatness of the galaxy
-    constexpr float center_mass = 10000.0f; // mass of the black hole in the middle
-    constexpr float G = 1.0f;               // gravity constant (simulation units)
+    constexpr FLOAT galaxy_radius = 100.0f;
+    constexpr FLOAT core_radius = 5.0f;     // no particles spawned closer than this
+    constexpr FLOAT disk_thickness = 2.0f;  // flatness of the galaxy
+    constexpr FLOAT center_mass = 10000.0f; // mass of the black hole in the middle
+    constexpr FLOAT G = 1.0f;               // gravity constant (simulation units)
 
     h_particles[0] = {0, 0, 0, 0, 0, 0, center_mass}; // black hole to center around
 
@@ -105,37 +111,44 @@ int main(int argc, char **argv)
 
     for (int i = 1; i < n; ++i)
     {
-        float angle = angle_dist(gen);
-        float dist = radius_dist(gen);
+        FLOAT angle = angle_dist(gen);
+        FLOAT dist = radius_dist(gen);
 
-        float px = dist * cos(angle);
-        float py = dist * sin(angle);
-        float pz = height_dist(gen);
+        FLOAT px = dist * cos(angle);
+        FLOAT py = dist * sin(angle);
+        FLOAT pz = height_dist(gen);
 
-        float velocity = sqrt(G * center_mass / dist);
+        FLOAT velocity = sqrt(G * center_mass / dist);
 
-        float vx = -velocity * sin(angle);
-        float vy = velocity * cos(angle);
-        float vz = 0.0f;
+        FLOAT vx = -velocity * sin(angle);
+        FLOAT vy = velocity * cos(angle);
+        FLOAT vz = 0.0f;
 
-        float mass = mass_dist(gen);
+        FLOAT mass = mass_dist(gen);
 
         h_particles[i] = {px, py, pz, vx, vy, vz, mass};
     }
 
     Particle *d_particles;
-    CUDA_CHECK(cudaMalloc(&d_particles, n * sizeof(Particle)));
-    CUDA_CHECK(cudaMemcpy(d_particles, h_particles.data(), n * sizeof(Particle), cudaMemcpyHostToDevice));
+    if (mode != TREE)
+    {
+        CUDA_CHECK(cudaMalloc(&d_particles, n * sizeof(Particle)));
+        CUDA_CHECK(cudaMemcpy(d_particles, h_particles.data(), n * sizeof(Particle), cudaMemcpyHostToDevice));
+    }
 
-    float dt = 0.01f;
-    float softening = 1e-9f;
+    FLOAT dt = 0.01f;
+    FLOAT softening = 1e-9f;
 
     int num_blocks = (n + block_size - 1) / block_size;
 
     cudaEvent_t global_start, global_stop;
-    CUDA_CHECK(cudaEventCreate(&global_start));
-    CUDA_CHECK(cudaEventCreate(&global_stop));
-    CUDA_CHECK(cudaEventRecord(global_start));
+    std::chrono::steady_clock::time_point cpu_begin = std::chrono::steady_clock::now();
+    if (mode != TREE)
+    {
+        CUDA_CHECK(cudaEventCreate(&global_start));
+        CUDA_CHECK(cudaEventCreate(&global_stop));
+        CUDA_CHECK(cudaEventRecord(global_start));
+    }
 
     for (int iter = 0; iter < iterations; iter += steps_per_frame)
     {
@@ -149,26 +162,43 @@ int main(int argc, char **argv)
             case TILED:
                 nbody_tiled_kernel<<<num_blocks, block_size, shared_mem_size>>>(d_particles, n, dt, softening);
                 break;
+            case TREE:
+                nbody_barnes_hut_cpu(h_particles.data(), n, dt, softening);
+                break;
             }
         }
 
-        CUDA_CHECK(cudaGetLastError());
+        if (mode != TREE)
+        {
+            CUDA_CHECK(cudaGetLastError());
 
-        CUDA_CHECK(cudaDeviceSynchronize());
-        CUDA_CHECK(cudaMemcpy(h_particles.data(), d_particles, n * sizeof(Particle), cudaMemcpyDeviceToHost));
+            CUDA_CHECK(cudaDeviceSynchronize());
+            CUDA_CHECK(cudaMemcpy(h_particles.data(), d_particles, n * sizeof(Particle), cudaMemcpyDeviceToHost));
+        }
         print_csv_row(h_particles);
     }
 
-    CUDA_CHECK(cudaDeviceSynchronize());
-    CUDA_CHECK(cudaEventRecord(global_stop));
-    CUDA_CHECK(cudaEventSynchronize(global_stop));
     float elapsed_ms = 0.0f;
-    CUDA_CHECK(cudaEventElapsedTime(&elapsed_ms, global_start, global_stop));
+    if (mode != TREE)
+    {
+        CUDA_CHECK(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaEventRecord(global_stop));
+        CUDA_CHECK(cudaEventSynchronize(global_stop));
+        CUDA_CHECK(cudaEventElapsedTime(&elapsed_ms, global_start, global_stop));
+    }
+    else
+    {
+        std::chrono::steady_clock::time_point cpu_end = std::chrono::steady_clock::now();
+        elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(cpu_end - cpu_begin).count();
+    }
     std::cerr << "Total elapsed (s): " << (elapsed_ms / 1000.0f) << "\n";
 
-    CUDA_CHECK(cudaEventDestroy(global_start));
-    CUDA_CHECK(cudaEventDestroy(global_stop));
+    if (mode != TREE)
+    {
+        CUDA_CHECK(cudaEventDestroy(global_start));
+        CUDA_CHECK(cudaEventDestroy(global_stop));
 
-    CUDA_CHECK(cudaFree(d_particles));
+        CUDA_CHECK(cudaFree(d_particles));
+    }
     return 0;
 }

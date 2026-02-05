@@ -3,14 +3,14 @@
 
 /* Using shared memory, maybe there are better ways */
 
-__global__ void nbody_tiled_kernel(Particle *particles, int n, float dt, float softening)
+__global__ void nbody_tiled_kernel(Particle *particles, int n, FLOAT dt, FLOAT softening)
 {
     extern __shared__ Particle shared_particles[];
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    float fx = 0.0f;
-    float fy = 0.0f;
-    float fz = 0.0f;
+    FLOAT fx = 0.0f;
+    FLOAT fy = 0.0f;
+    FLOAT fz = 0.0f;
 
     Particle pi;
     if (i < n)
@@ -35,15 +35,15 @@ __global__ void nbody_tiled_kernel(Particle *particles, int n, float dt, float s
         {
             for (int j = 0; j < blockDim.x; j++)
             {
-                float dx = shared_particles[j].x - pi.x;
-                float dy = shared_particles[j].y - pi.y;
-                float dz = shared_particles[j].z - pi.z;
+                FLOAT dx = shared_particles[j].x - pi.x;
+                FLOAT dy = shared_particles[j].y - pi.y;
+                FLOAT dz = shared_particles[j].z - pi.z;
 
-                float distSqr = dx * dx + dy * dy + dz * dz + softening;
-                float invDist = 1.0f / sqrtf(distSqr);
-                float invDist3 = invDist * invDist * invDist;
+                FLOAT distSqr = dx * dx + dy * dy + dz * dz + softening;
+                FLOAT invDist = 1.0f / sqrtf(distSqr);
+                FLOAT invDist3 = invDist * invDist * invDist;
 
-                float s = shared_particles[j].mass * invDist3;
+                FLOAT s = shared_particles[j].mass * invDist3;
 
                 fx += dx * s;
                 fy += dy * s;

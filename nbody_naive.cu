@@ -1,14 +1,14 @@
 #include "nbody.cuh"
 
-__global__ void nbody_naive_kernel(Particle *particles, int n, float dt, float softening)
+__global__ void nbody_naive_kernel(Particle *particles, int n, FLOAT dt, FLOAT softening)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n)
         return;
 
-    float fx = 0.0f;
-    float fy = 0.0f;
-    float fz = 0.0f;
+    FLOAT fx = 0.0f;
+    FLOAT fy = 0.0f;
+    FLOAT fz = 0.0f;
 
     Particle pi = particles[i];
 
@@ -16,15 +16,15 @@ __global__ void nbody_naive_kernel(Particle *particles, int n, float dt, float s
     {
         Particle pj = particles[j];
 
-        float dx = pj.x - pi.x;
-        float dy = pj.y - pi.y;
-        float dz = pj.z - pi.z;
+        FLOAT dx = pj.x - pi.x;
+        FLOAT dy = pj.y - pi.y;
+        FLOAT dz = pj.z - pi.z;
 
-        float distSqr = dx * dx + dy * dy + dz * dz + softening;
-        float invDist = 1.0f / fast_rsqrtf(distSqr);
-        float invDist3 = invDist * invDist * invDist;
+        FLOAT distSqr = dx * dx + dy * dy + dz * dz + softening;
+        FLOAT invDist = 1.0f / rsqrtf(distSqr);
+        FLOAT invDist3 = invDist * invDist * invDist;
 
-        float s = pj.mass * invDist3;
+        FLOAT s = pj.mass * invDist3;
 
         fx += dx * s;
         fy += dy * s;

@@ -44,15 +44,13 @@ typedef enum CudaMode
 int main(int argc, char **argv)
 {
     int n = 1024;
-    constexpr size_t block_size = 256;
+    size_t block_size = 256;
     int iterations = 10;
     int steps_per_frame = 20;
     cudamode_t mode = TILED;
-    // x, y, z, mass arrays, vx... aren't needed in calculations
-    constexpr size_t shared_mem_size = 4 * block_size * sizeof(FLOAT);
 
     int opt;
-    while ((opt = getopt(argc, argv, "n:s:i:m:")) != -1)
+    while ((opt = getopt(argc, argv, "n:s:i:m:b:")) != -1)
     {
         switch (opt)
         {
@@ -87,8 +85,11 @@ int main(int argc, char **argv)
         case 's':
             steps_per_frame = std::stoi(optarg);
             break;
+        case 'b':
+            block_size = std::stoi(optarg);
+            break;
         default:
-            std::cerr << "Usage: " << argv[0] << " -n <num_particles> -s <skip_nb_frame> -i <iterations> -m <naive|tiled>\n";
+            std::cerr << "Usage: " << argv[0] << " -n <num_particles> -s <skip_nb_frame> -i <iterations> -m <naive|tiled|tree> -b <block_size>\n";
             return 1;
         }
     }
@@ -129,6 +130,9 @@ int main(int argc, char **argv)
 
         h_particles[i] = {px, py, pz, vx, vy, vz, mass};
     }
+
+    // x, y, z, mass arrays, vx... aren't needed in calculations
+    size_t shared_mem_size = 4 * block_size * sizeof(FLOAT);
 
     ParticleArrays d_particles;
     if (mode != TREE)
@@ -209,7 +213,36 @@ int main(int argc, char **argv)
             CUDA_CHECK(cudaGetLastError());
 
             CUDA_CHECK(cudaDeviceSynchronize());
-            CUDA_CHECK(cudaMemcpy(h_particles.data(), d_particles, n * sizeof(Particle), cudaMemcpyDeviceToHost));
+
+            std::vector<FLOAT> temp(n);
+
+            CUDA_CHECK(cudaMemcpy(temp.data(), d_particles.x, n * sizeof(FLOAT), cudaMemcpyDeviceToHost));
+            for (int i = 0; i < n; ++i)
+                h_particles[i].x = temp[i];
+
+            CUDA_CHECK(cudaMemcpy(temp.data(), d_particles.y, n * sizeof(FLOAT), cudaMemcpyDeviceToHost));
+            for (int i = 0; i < n; ++i)
+                h_particles[i].y = temp[i];
+
+            CUDA_CHECK(cudaMemcpy(temp.data(), d_particles.z, n * sizeof(FLOAT), cudaMemcpyDeviceToHost));
+            for (int i = 0; i < n; ++i)
+                h_particles[i].z = temp[i];
+
+            CUDA_CHECK(cudaMemcpy(temp.data(), d_particles.vx, n * sizeof(FLOAT), cudaMemcpyDeviceToHost));
+            for (int i = 0; i < n; ++i)
+                h_particles[i].vx = temp[i];
+
+            CUDA_CHECK(cudaMemcpy(temp.data(), d_particles.vy, n * sizeof(FLOAT), cudaMemcpyDeviceToHost));
+            for (int i = 0; i < n; ++i)
+                h_particles[i].vy = temp[i];
+
+            CUDA_CHECK(cudaMemcpy(temp.data(), d_particles.vz, n * sizeof(FLOAT), cudaMemcpyDeviceToHost));
+            for (int i = 0; i < n; ++i)
+                h_particles[i].vz = temp[i];
+
+            CUDA_CHECK(cudaMemcpy(temp.data(), d_particles.mass, n * sizeof(FLOAT), cudaMemcpyDeviceToHost));
+            for (int i = 0; i < n; ++i)
+                h_particles[i].mass = temp[i];
         }
         print_csv_row(h_particles);
     }
@@ -234,7 +267,13 @@ int main(int argc, char **argv)
         CUDA_CHECK(cudaEventDestroy(global_start));
         CUDA_CHECK(cudaEventDestroy(global_stop));
 
-        CUDA_CHECK(cudaFree(d_particles));
+        CUDA_CHECK(cudaFree(d_particles.x));
+        CUDA_CHECK(cudaFree(d_particles.y));
+        CUDA_CHECK(cudaFree(d_particles.z));
+        CUDA_CHECK(cudaFree(d_particles.vx));
+        CUDA_CHECK(cudaFree(d_particles.vy));
+        CUDA_CHECK(cudaFree(d_particles.vz));
+        CUDA_CHECK(cudaFree(d_particles.mass));
     }
     return 0;
 }

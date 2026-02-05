@@ -48,7 +48,8 @@ int main(int argc, char **argv)
     int iterations = 10;
     int steps_per_frame = 20;
     cudamode_t mode = TILED;
-    constexpr size_t shared_mem_size = block_size * sizeof(Particle);
+    // x, y, z, mass arrays, vx... aren't needed in calculations
+    constexpr size_t shared_mem_size = 4 * block_size * sizeof(FLOAT);
 
     int opt;
     while ((opt = getopt(argc, argv, "n:s:i:m:")) != -1)
@@ -129,11 +130,46 @@ int main(int argc, char **argv)
         h_particles[i] = {px, py, pz, vx, vy, vz, mass};
     }
 
-    Particle *d_particles;
+    ParticleArrays d_particles;
     if (mode != TREE)
     {
-        CUDA_CHECK(cudaMalloc(&d_particles, n * sizeof(Particle)));
-        CUDA_CHECK(cudaMemcpy(d_particles, h_particles.data(), n * sizeof(Particle), cudaMemcpyHostToDevice));
+        CUDA_CHECK(cudaMalloc(&d_particles.x, n * sizeof(FLOAT)));
+        CUDA_CHECK(cudaMalloc(&d_particles.y, n * sizeof(FLOAT)));
+        CUDA_CHECK(cudaMalloc(&d_particles.z, n * sizeof(FLOAT)));
+        CUDA_CHECK(cudaMalloc(&d_particles.vx, n * sizeof(FLOAT)));
+        CUDA_CHECK(cudaMalloc(&d_particles.vy, n * sizeof(FLOAT)));
+        CUDA_CHECK(cudaMalloc(&d_particles.vz, n * sizeof(FLOAT)));
+        CUDA_CHECK(cudaMalloc(&d_particles.mass, n * sizeof(FLOAT)));
+
+        std::vector<FLOAT> temp(n);
+
+        for (int i = 0; i < n; ++i)
+            temp[i] = h_particles[i].x;
+        CUDA_CHECK(cudaMemcpy(d_particles.x, temp.data(), n * sizeof(FLOAT), cudaMemcpyHostToDevice));
+
+        for (int i = 0; i < n; ++i)
+            temp[i] = h_particles[i].y;
+        CUDA_CHECK(cudaMemcpy(d_particles.y, temp.data(), n * sizeof(FLOAT), cudaMemcpyHostToDevice));
+
+        for (int i = 0; i < n; ++i)
+            temp[i] = h_particles[i].z;
+        CUDA_CHECK(cudaMemcpy(d_particles.z, temp.data(), n * sizeof(FLOAT), cudaMemcpyHostToDevice));
+
+        for (int i = 0; i < n; ++i)
+            temp[i] = h_particles[i].vx;
+        CUDA_CHECK(cudaMemcpy(d_particles.vx, temp.data(), n * sizeof(FLOAT), cudaMemcpyHostToDevice));
+
+        for (int i = 0; i < n; ++i)
+            temp[i] = h_particles[i].vy;
+        CUDA_CHECK(cudaMemcpy(d_particles.vy, temp.data(), n * sizeof(FLOAT), cudaMemcpyHostToDevice));
+
+        for (int i = 0; i < n; ++i)
+            temp[i] = h_particles[i].vz;
+        CUDA_CHECK(cudaMemcpy(d_particles.vz, temp.data(), n * sizeof(FLOAT), cudaMemcpyHostToDevice));
+
+        for (int i = 0; i < n; ++i)
+            temp[i] = h_particles[i].mass;
+        CUDA_CHECK(cudaMemcpy(d_particles.mass, temp.data(), n * sizeof(FLOAT), cudaMemcpyHostToDevice));
     }
 
     FLOAT dt = 0.01f;

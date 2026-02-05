@@ -1,5 +1,4 @@
 #include "nbody.cuh"
-#include <cmath>
 
 __global__ void nbody_naive_kernel(Particle *particles, int n, float dt, float softening)
 {
@@ -22,7 +21,7 @@ __global__ void nbody_naive_kernel(Particle *particles, int n, float dt, float s
         float dz = pj.z - pi.z;
 
         float distSqr = dx * dx + dy * dy + dz * dz + softening;
-        float invDist = 1.0f / sqrtf(distSqr);
+        float invDist = 1.0f / fast_rsqrtf(distSqr);
         float invDist3 = invDist * invDist * invDist;
 
         float s = pj.mass * invDist3;
@@ -32,8 +31,6 @@ __global__ void nbody_naive_kernel(Particle *particles, int n, float dt, float s
         fz += dz * s;
     }
 
-    // G is assumed to be 1.0 for simplicity in this academic context
-    // Unless specified otherwise.
     particles[i].vx += dt * fx;
     particles[i].vy += dt * fy;
     particles[i].vz += dt * fz;
